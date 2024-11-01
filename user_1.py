@@ -3,14 +3,13 @@ import tkinter as tk
 import socket
 import threading
 from PIL import Image, ImageTk
-import numpy as np
 
 # Biến toàn cục để lưu trữ các client
-camera_clients = {}
-screen_clients = {}
-audio_senders = {}
-audio_receivers = {}
+camera_client = None
+stream_client = None
+audio_sender = None
 
+# Lấy địa chỉ IP cục bộ của máy
 local_ip_address = socket.gethostbyname(socket.gethostname())
 print("Local IP Address:", local_ip_address)
 server = StreamingServer(local_ip_address, 7777)
@@ -23,143 +22,128 @@ def start_listening():
     t2.start()
     print("Server started")
 
-def toggle_audio_stream():
-    if text_user_name.get(1.0, 'end-1c') and text_target_ip.get(1.0, 'end-1c'):
-        user_name = text_user_name.get(1.0, 'end-1c').strip()
-        target_ip = text_target_ip.get(1.0, 'end-1c').strip()
-
-        if user_name not in audio_senders:
-            audio_sender = AudioSender(target_ip, 8888)
-            audio_senders[user_name] = audio_sender
-            t = threading.Thread(target=start_audio_stream, args=(user_name,))
-            t.start()
-            print(f"Audio stream started for {user_name}")
-        else:
-            audio_senders[user_name].stop_stream()
-            del audio_senders[user_name]
-            print(f"Audio stream stopped for {user_name}")
-
-def start_audio_stream(user_name):
-    audio_sender = audio_senders[user_name]
-    audio_sender.start_stream()
-    while user_name in audio_senders:
-        pass  # Logic for continuous audio streaming can be added here if needed
-
 def toggle_camera_stream():
-    if text_user_name.get(1.0, 'end-1c') and text_target_ip.get(1.0, 'end-1c'):
-        user_name = text_user_name.get(1.0, 'end-1c').strip()
-        target_ip = text_target_ip.get(1.0, 'end-1c').strip()
+    global camera_client
+    if camera_client is None:
+        camera_client = CameraClient(text_target_ip.get(1.0, 'end-1c'), 9999)
+        t3 = threading.Thread(target=start_camera_stream)
+        t3.start()
+        btn_camera.config(text="Stop Camera Stream", bg="green", fg="white")
+        print("Camera stream started")
+    else:
+        camera_client.stop_stream()
+        camera_client = None
+        btn_camera.config(text="Start Camera Stream", bg="red", fg="white")
+        stop_video_display()  # Đưa đến hàm để dừng hiển thị video
+        print("Camera stream stopped")
 
-        if user_name not in camera_clients:
-            camera_client = CameraClient(target_ip, 9999)
-            camera_clients[user_name] = camera_client
-            t = threading.Thread(target=start_camera_stream, args=(user_name,))
-            t.start()
-            print(f"Camera stream started for {user_name}")
-        else:
-            camera_clients[user_name].stop_stream()
-            del camera_clients[user_name]
-            print(f"Camera stream stopped for {user_name}")
-
-def start_camera_stream(user_name):
-    camera_client = camera_clients[user_name]
-    while user_name in camera_clients:
-        frame = camera_client._get_frame()
+def start_camera_stream():
+    global camera_client
+    while camera_client is not None:
+        frame = camera_client._get_frame()  # Lấy frame từ camera
         if frame is not None:
+            # Chuyển đổi frame thành hình ảnh có thể hiển thị
             image = Image.fromarray(frame)
-            image = image.resize((160, 120))  # Kích thước video nhỏ hơn cho hiển thị
+            image = image.resize((640, 480))
             photo = ImageTk.PhotoImage(image)
-            # Cập nhật giao diện với video của người dùng
-            update_video_display(user_name, photo, "camera")
+            label_video.config(image=photo)
+            label_video.image = photo  # Giữ tham chiếu đến hình ảnh
         else:
             break
+        window.update_idletasks()  # Cập nhật giao diện
 
 def toggle_screen_sharing():
-    if text_user_name.get(1.0, 'end-1c') and text_target_ip.get(1.0, 'end-1c'):
-        user_name = text_user_name.get(1.0, 'end-1c').strip()
-        target_ip = text_target_ip.get(1.0, 'end-1c').strip()
+    global stream_client
+    if stream_client is None:
+        stream_client = ScreenShareClient(text_target_ip.get(1.0, 'end-1c'), 9999)
+        t4 = threading.Thread(target=start_screen_sharing)
+        t4.start()
+        btn_screen.config(text="Stop Screen Sharing", bg="green", fg="white")
+        print("Screen sharing started")
+    else:
+        stream_client.stop_stream()
+        stream_client = None
+        btn_screen.config(text="Start Screen Sharing", bg="red", fg="white")
+        stop_video_display()  # Dừng hiển thị video
+        print("Screen sharing stopped")
 
-        if user_name not in screen_clients:
-            stream_client = ScreenShareClient(target_ip, 9999)
-            screen_clients[user_name] = stream_client
-            t = threading.Thread(target=start_screen_sharing, args=(user_name,))
-            t.start()
-            print(f"Screen sharing started for {user_name}")
-        else:
-            screen_clients[user_name].stop_stream()
-            del screen_clients[user_name]
-            print(f"Screen sharing stopped for {user_name}")
-
-def start_screen_sharing(user_name):
-    stream_client = screen_clients[user_name]
-    while user_name in screen_clients:
-        frame = stream_client._get_frame()
+def start_screen_sharing():
+    global stream_client
+    while stream_client is not None:
+        frame = stream_client._get_frame()  # Lấy frame từ chia sẻ màn hình
         if frame is not None:
+            # Chuyển đổi frame thành hình ảnh có thể hiển thị
             image = Image.fromarray(frame)
-            image = image.resize((160, 120))  # Kích thước video nhỏ hơn cho hiển thị
+            image = image.resize((640, 480))
             photo = ImageTk.PhotoImage(image)
-            # Cập nhật giao diện với màn hình chia sẻ của người dùng
-            update_video_display(user_name, photo, "screen")
+            label_video.config(image=photo)
+            label_video.image = photo  # Giữ tham chiếu đến hình ảnh
         else:
             break
+        window.update_idletasks()  # Cập nhật giao diện
 
-def update_video_display(user_name, photo, stream_type):
-    # Cập nhật video camera hoặc màn hình chia sẻ cho người dùng
-    if stream_type == "camera":
-        label = labels_camera.get(user_name)
+def toggle_audio_stream():
+    global audio_sender
+    if audio_sender is None:
+        audio_sender = AudioSender(text_target_ip.get(1.0, 'end-1c'), 8888)
+        t5 = threading.Thread(target=audio_sender.start_stream)
+        t5.start()
+        btn_audio.config(text="Stop Audio Stream", bg="green", fg="white")
+        print("Audio stream started")
     else:
-        label = labels_screen.get(user_name)
+        audio_sender.stop_stream()
+        audio_sender = None
+        btn_audio.config(text="Start Audio Stream", bg="red", fg="white")
+        print("Audio stream stopped")
 
-    if label is not None:
-        label.config(image=photo)
-        label.image = photo
-
-def create_user_video_display(user_name):
-    # Tạo không gian hiển thị cho camera và màn hình chia sẻ của người dùng
-    frame_user = tk.Frame(window, bg="black")
-    frame_user.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-    label_camera = tk.Label(frame_user, bg="black", text=f"{user_name}'s Camera", fg="white")
-    label_camera.pack(expand=True, fill=tk.BOTH)
-    labels_camera[user_name] = label_camera
-
-    label_screen = tk.Label(frame_user, bg="black", text=f"{user_name}'s Screen", fg="white")
-    label_screen.pack(expand=True, fill=tk.BOTH)
-    labels_screen[user_name] = label_screen
+def stop_video_display():
+    # Đặt màu nền thành đen và hiển thị tên người dùng
+    label_video.config(image='', bg='black')  # Đặt hình ảnh là trống
+    label_video.text = "Account: " + text_user_name.get(1.0, 'end-1c')  # Hiển thị tên người dùng
+    label_video.pack(expand=True, fill=tk.BOTH)
+    label_name.config(text=label_video.text)
 
 # GUI
 window = tk.Tk()
 window.title("Meeting Calls v0.1.7 BETA")
 window.geometry('800x800')
 
-labels_camera = {}
-labels_screen = {}
-
 label_target_ip = tk.Label(window, text="Target IP:")
 label_target_ip.pack()
 
-text_target_ip = tk.Text(window, height=1)
+# Text box để nhập IP mục tiêu
+text_target_ip = tk.Text(window, height=1, width=30)
 text_target_ip.pack()
-
-label_user_name = tk.Label(window, text="User Name:")
-label_user_name.pack()
-
-text_user_name = tk.Text(window, height=1)
-text_user_name.pack()
 
 btn_listen = tk.Button(window, text="Start Listening", width=50, command=start_listening)
 btn_listen.pack(anchor=tk.CENTER, expand=True)
 
 # Nút điều khiển camera
-btn_camera = tk.Button(window, text="Start/Stop Camera Stream", width=50, bg="red", fg="white", command=toggle_camera_stream)
+btn_camera = tk.Button(window, text="Start Camera Stream", width=50, bg="red", fg="white", command=toggle_camera_stream)
 btn_camera.pack(anchor=tk.CENTER, expand=True)
 
 # Nút điều khiển chia sẻ màn hình
-btn_screen = tk.Button(window, text="Start/Stop Screen Sharing", width=50, bg="red", fg="white", command=toggle_screen_sharing)
+btn_screen = tk.Button(window, text="Start Screen Sharing", width=50, bg="red", fg="white", command=toggle_screen_sharing)
 btn_screen.pack(anchor=tk.CENTER, expand=True)
 
 # Nút điều khiển âm thanh
-btn_audio = tk.Button(window, text="Start/Stop Audio Stream", width=50, bg="red", fg="white", command=toggle_audio_stream)
+btn_audio = tk.Button(window, text="Start Audio Stream", width=50, bg="red", fg="white", command=toggle_audio_stream)
 btn_audio.pack(anchor=tk.CENTER, expand=True)
+
+# Khung hiển thị video hoặc màn hình
+frame_video = tk.Frame(window, bg="black", width=640, height=480)
+frame_video.pack(padx=10, pady=10)
+
+# Label để hiển thị video hoặc màn hình
+label_video = tk.Label(frame_video, bg="black", text="No active video", fg="white")
+label_video.pack(expand=True, fill=tk.BOTH)
+
+# Label để hiển thị tên người dùng
+label_name = tk.Label(window, bg="black", fg="white", text="")
+label_name.pack()
+
+# Text box để nhập tên người dùng
+text_user_name = tk.Text(window, height=1, width=30)
+text_user_name.pack()
 
 window.mainloop()
