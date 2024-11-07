@@ -1,10 +1,8 @@
 import threading
 import tkinter as tk
-from vidstream.streaming import CameraClient, ScreenShareClient, VideoClient, StreamingServer
-from vidstream.audio import AudioSender, AudioReceiver
+from vidstream import CameraClient
 from tkinter import messagebox
 import time
-from PIL import Image, ImageTk
 
 class MeetingClientApp:
     def __init__(self, root):
@@ -56,15 +54,7 @@ class MeetingClientApp:
         self.video_frames = tk.Frame(root)
         self.video_frames.pack(fill=tk.BOTH, expand=True)
 
-        # Audio control button
-        self.audio_button = tk.Button(root, text="Mic On", command=self.toggle_audio)
-        self.audio_button.pack(side="left", padx=10, pady=10)
-
         self.video_client = None
-        self.screen_share_client = None
-        self.streaming_server = None
-        self.audio_sender = None
-        self.audio_receiver = None
         self.user_name = ""
 
     def toggle_mic(self):
@@ -77,10 +67,8 @@ class MeetingClientApp:
         self.screen_share_button.config(text="Stop Sharing" if self.screen_share_on else "Share Screen")
         if self.screen_share_on:
             messagebox.showinfo("Screen Share", "Screen sharing started.")
-            self.start_screen_share()
         else:
             messagebox.showinfo("Screen Share", "Screen sharing stopped.")
-            self.stop_screen_share()
 
     def toggle_camera(self):
         self.camera_on = not self.camera_on
@@ -88,61 +76,22 @@ class MeetingClientApp:
         if not self.camera_on and self.capture:
             self.video_frame.config(image="")  # Clear the display when camera is off
 
-    def toggle_audio(self):
-        self.mic_on = not self.mic_on
-        self.audio_button.config(text="Mic On" if self.mic_on else "Mic Off")
-        if not self.mic_on:
-            self.stop_audio()
-        else:
-            self.start_audio()
-
     def start_video(self):
         self.user_name = self.name_entry.get()
         server_ip = self.server_ip_entry.get()
         room_port = int(self.room_port_entry.get())
 
-        # Initialize the video, audio sender and receiver clients
-        self.streaming_server = StreamingServer(server_ip, room_port)
-        self.video_client = VideoClient(server_ip, room_port)
-        self.audio_sender = AudioSender(server_ip, room_port)
-        self.audio_receiver = AudioReceiver(server_ip, room_port)
-
-        threading.Thread(target=self.streaming_server.start_stream).start()
+        # Initialize the video client and start the server
+        self.video_client = CameraClient(server_ip, room_port)
         threading.Thread(target=self.video_client.start_stream).start()
-        threading.Thread(target=self.audio_sender.start_stream).start()
-        threading.Thread(target=self.audio_receiver.start_stream).start()
 
-        # Create video frame to show
+        # Create server instance and start video streaming
         self.create_video_frame(self.user_name)
 
     def stop_video(self):
         if self.video_client:
             self.video_client.stop_stream()
-        if self.streaming_server:
-            self.streaming_server.stop_stream()
-        if self.audio_sender:
-            self.audio_sender.stop_stream()
-        if self.audio_receiver:
-            self.audio_receiver.stop_stream()
         self.clear_video_frames()
-
-    def start_screen_share(self):
-        server_ip = self.server_ip_entry.get()
-        room_port = int(self.room_port_entry.get())
-        self.screen_share_client = ScreenShareClient(server_ip, room_port)
-        threading.Thread(target=self.screen_share_client.start_stream).start()
-
-    def stop_screen_share(self):
-        if self.screen_share_client:
-            self.screen_share_client.stop_stream()
-
-    def start_audio(self):
-        if self.audio_sender:
-            self.audio_sender.start_stream()
-
-    def stop_audio(self):
-        if self.audio_sender:
-            self.audio_sender.stop_stream()
 
     def create_video_frame(self, name):
         # Create a new frame for the video feed with the user's name
